@@ -3,3 +3,5 @@
 scRiskDB (available at www.scriskdb.cn ) is a freely accessible, registration-free resource designed to bridge the gap between trait-associated genetic variants and their functional impacts at single-cell resolution. 
 
 By integrating single-cell multi-omics data—including scRNA-seq, scATAC-seq, and multiome datasets—with GWAS summary statistics, scRiskDB enables researchers to systematically annotate single-nucleotide variants (SNVs), identify risk genes and cis-regulatory elements (CREs), explore trait-relevant pathways, and compare disease-associated regulatory landscapes across tissues and developmental stages.
+
+[Fig1_abstract.pdf](https://github.com/user-attachments/files/20515154/Fig1_abstract.pdf)
