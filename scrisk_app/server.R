@@ -41,7 +41,7 @@ server <- function(input, output,session) {
   observeEvent(input$file_sub, {
     req(input$file_sub)
     
-    # 获取上传文件的信息（包括路径）
+
     uploaded_files <- input$file_sub
     
     for (i in 1:nrow(uploaded_files)) {
@@ -140,7 +140,7 @@ server <- function(input, output,session) {
       title = "Searching...",
       text = "Query is running, please wait.",
       type = "info",
-      timer = 5000,        # 自动消失时间，毫秒
+      timer = 5000,       
       showConfirmButton = FALSE
     )
     
@@ -259,14 +259,14 @@ onStop(function() {
     selected_tissue_raw <- input$gene_tissue_input
     selected_disease <- input$gene_disease_input
     
-    # 提取组织基础名（去掉括号及其中内容）
+
     tissue_base <- sub("\\(.*\\)", "", selected_tissue_raw)
-    tissue_base <- trimws(tissue_base)  # 去掉左右空格
+    tissue_base <- trimws(tissue_base)  
     
     tissue_adult <- paste0(tissue_base, "(Adult)")
     tissue_fetal <- paste0(tissue_base, "(Fetal)")
     
-    # Adult 查询
+
     query_adult_gene <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` 
                           WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                                 tissue_adult, selected_disease)
@@ -275,7 +275,7 @@ onStop(function() {
     adult_result_gene <- cursor$fetchall()
     adult_genes <- unique(unlist(lapply(adult_result_gene, `[[`, 1)))
     
-    # Fetal 查询
+
     query_fetal_cre <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` 
                           WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                                tissue_fetal, selected_disease)
@@ -284,11 +284,11 @@ onStop(function() {
     fetal_genes <- unique(unlist(lapply(fetal_result_gene, `[[`, 1)))
     
     
-    # 取差异
+
     adult_specific_gene <- setdiff(adult_genes, fetal_genes)
     fetal_specific_gene <- setdiff(fetal_genes, adult_genes)
     
-    # 输出表格
+
     output$adult_specific_table <- renderDT({
       if (length(adult_specific_gene) == 0) {
         data.frame(Message = "No adult-specific genes found")
@@ -319,7 +319,7 @@ onStop(function() {
       tissue_adult <- paste0(tissue_base, "(Adult)")
       tissue_fetal <- paste0(tissue_base, "(Fetal)")
       
-      # 查询 Adult CRE
+
       query_adult_gene <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` 
                             WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                                   tissue_adult, selected_disease)
@@ -619,7 +619,7 @@ onStop(function() {
         coord_fixed() +  
         
         
-        geom_tile(data = filter(cell_data, assoc_mcp < 0.05), color = "black", size = 1, width = 1, height = 1) +
+        geom_tile(data = filter(cell_data, assoc_mcp < 0.1), color = "black", size = 1, width = 1, height = 1) +
         
         
         geom_text(aes(label = mark), color = "black", size = 6)
@@ -652,7 +652,7 @@ onStop(function() {
     }
     req(input$cell_tissue_input, input$celltype_input_single, input$cell_disease_input_single)
     
-    # Step 1: 获取组织+细胞类型 对应的 CRE
+   
     query_cre <- paste0("SELECT CRE FROM CellType_Peak WHERE `Tissue name` = '", input$cell_tissue_input, 
                         "' AND cell_type = '", input$celltype_input_single, "'")
     cursor <- conn$cursor()
@@ -666,7 +666,7 @@ onStop(function() {
     
     
     
-    # Step 2: 在 Risk CRE 表中查找这些 CRE 对应的 disease-specific 行
+
     cre_in_clause <- paste0("'", paste(cre_list, collapse = "','"), "'")
     query_risk <- paste0(
       "SELECT `Risk CREs`, `Risk Genes`, `SNPs`,`Disease_id` FROM `Risk CRE` ",
@@ -1008,7 +1008,7 @@ onStop(function() {
     output$task_id_output <- renderText(sprintf("Job ID: %s", task_id))
   })
   
-  # **修改任务状态查询**
+
   output$run_status <- renderText({
     current_id <- current_task_id()
     if (is.null(current_id) || current_id == "") {
