@@ -14,12 +14,12 @@ ui <- tagList(
     position: relative;
     padding: 6px 12px;
   ",
-    # 居中标题
+
     tags$div(
       style = "text-align: center;",
       "SCRISKDB 数据记录"
     ),
-    # 右上角关闭按钮
+
     tags$span(
       id = "hideBannerBtn",
       style = "
@@ -434,9 +434,9 @@ ui <- tagList(
                 )
               ),
               
-              # 使用 conditionalPanel 控制选择框的显示
+            
               conditionalPanel(
-                condition = "input.data_type != 'atac'", # 当选择 'RNA-seq' 时显示
+                condition = "input.data_type != 'atac'",
                 wellPanel(
                   selectInput("disease_select", "Select Disease:", choices = c("Disease1", "Disease2")),
                   selectInput("tissue_select", "Select Tissue:", choices = c("Tissue1", "Tissue2"))
@@ -444,7 +444,7 @@ ui <- tagList(
               ),
               
               conditionalPanel(
-                condition = "input.data_type == 'atac'", # 当选择 'ATAC-seq' 时显示
+                condition = "input.data_type == 'atac'",
                 wellPanel(
                   fileInput("gs_upload", "Upload ATAC Risk Data (CRE ZSTAT)")
                 )
@@ -528,7 +528,7 @@ ui <- tagList(
     ) #dashboard
   ) # Main body
 ),
-# ✅ 工信部备案页脚信息，固定在底部
+
 tags$div(
   style = "
       position: fixed;
