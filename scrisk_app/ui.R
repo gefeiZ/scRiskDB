@@ -1,10 +1,47 @@
 
 ########UI PART##########
-ui <- dashboardPage(
+
+ui <- tagList(
+  
+  
+  tags$div(
+    id = "topBanner",
+    style = "
+    background-color: #f1f1f1;
+    font-size: 13px;
+    color: #666;
+    border-bottom: 1px solid #ccc;
+    position: relative;
+    padding: 6px 12px;
+  ",
+    # 居中标题
+    tags$div(
+      style = "text-align: center;",
+      "SCRISKDB 数据记录"
+    ),
+    # 右上角关闭按钮
+    tags$span(
+      id = "hideBannerBtn",
+      style = "
+      position: absolute;
+      top: 4px;
+      right: 10px;
+      cursor: pointer;
+      color: #888;
+      font-size: 12px;
+    ",
+      icon("times"), "关闭",
+      onclick = "document.getElementById('topBanner').style.display='none';"
+    )
+  ),
+  
+
+  
+  dashboardPage(
   
   skin = "purple",
   # Header
-  dashboardHeader(title = "scRiskDB_Demo"),
+  dashboardHeader(title = " "),
   
   # Sidebar
   dashboardSidebar(
@@ -14,13 +51,15 @@ ui <- dashboardPage(
                          menuSubItem("Explore SNVs", tabName = "Snp"),
                          menuSubItem("SNV to Risk Genes", tabName = "gene"),
                          menuSubItem("SNV to Risk CREs", tabName = "cre"),
-                         menuSubItem("SNV to Function", tabName = "geneset"),
                          menuSubItem("Explore Risk Cells", tabName = "cell")),
-                menuItem("More Analysis", tabName = "more_analysis", icon = icon("chart-bar")),
+                         
+                menuItem("Analysis Tools", icon = icon("chart-bar"),
+                         menuSubItem("Cell Scoring", tabName = "more_analysis"),
+                         menuSubItem("SNV to Function", tabName = "geneset")),
+                
                 menuItem("Help", tabName = "help", icon = icon("question-circle")),
                 menuItem("Contact", tabName = "contact", icon = icon("envelope")),
-                menuItem("Submission", tabName = "submission", icon = icon("upload"))
-    )
+                menuItem("Submission", tabName = "submission", icon = icon("upload")))
   ),
   
   # Main body
@@ -50,7 +89,7 @@ ui <- dashboardPage(
     tabItems(
       ############### HOME ######################
       tabItem(tabName = "home",
-              h2("Welcome to scRiskDB_Demo"),
+              h2("Welcome to scRiskDB"),
               p("A platform for displaying Human Disease-Related Tissue-Specific Resources."),
               p("scRiskDB provide the annotated,prioritized tissue-,development-specific data"),
               tags$hr(style = "border:none; border-top:5px solid #5E81AC;"),
@@ -123,7 +162,7 @@ ui <- dashboardPage(
                   actionButton("submit", "Search")
                 ),
                 mainPanel(
-                  tableOutput("snp_result_table"))),
+                  DTOutput("snp_result_table"))),
               tags$hr(style = "border:none; border-top:5px solid #caf2bb;"),
               fluidRow(
                 tags$div(style = "margin: 20px;", 
@@ -278,7 +317,8 @@ ui <- dashboardPage(
               
               fluidRow(
                 column(6, actionButton("display_results", "Display Table", class = "btn btn-info")),
-                column(6, actionButton("display_plot", "Visualization", class = "btn btn-secondary"))
+                #column(6, actionButton("display_plot", "Visualization", class = "btn btn-secondary"))
+                column(6, uiOutput("plot_button_ui"))
               ),
               
               tags$hr(style = "border:none; border-top:5px solid #caf2bb;"),
@@ -289,7 +329,7 @@ ui <- dashboardPage(
               
               
               
-              tags$h3("Enrichment Analysis Results"),
+              tags$h4("Enrichment Analysis Results"),
               
               fluidRow(tags$div(style = "margin: 20px;",  
                                 uiOutput("enrichment_output"))), 
@@ -446,7 +486,7 @@ ui <- dashboardPage(
           withMathJax(),
           div(
             includeMarkdown("www/help.md"),
-            style = "max-height: 70vh; overflow-y: auto; padding-right: 10px;"
+            style = "max-height: 75vh; overflow-y: auto; padding-right: 10px;"
           )
         ),
         tags$div(
@@ -487,4 +527,26 @@ ui <- dashboardPage(
       
     ) #dashboard
   ) # Main body
-) #ui
+),
+# ✅ 工信部备案页脚信息，固定在底部
+tags$div(
+  style = "
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 5px 0;
+      font-size: 10px;
+      color: #6c757d;
+      z-index: 1000;
+    ",
+  HTML('
+      scRsikDB数据记录 |
+      <a href="https://beian.miit.gov.cn/" target="_blank" style="color: #6c757d; text-decoration: none;">
+        京ICP备2025121216号
+      </a>
+    ')
+)
+)

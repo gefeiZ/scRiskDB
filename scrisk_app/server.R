@@ -90,92 +90,100 @@ server <- function(input, output,session) {
   
   
   ####################### SNV SERVER###########################
-  observeEvent(input$submit, {
+  snp_filtered_data_df <- reactive({
+    req(input$disease, input$tissue, input$rsid)
+    
     selected_disease <- input$disease
     selected_tissue <- input$tissue
     rsid <- input$rsid
     
-    #query <- sprintf("SELECT * FROM snp_data WHERE `Disease_id` = '%s' AND `Tissue` = '%s' AND `rsID` = '%s'",
-    #                 selected_disease, selected_tissue, rsid)
     query <- sprintf("
     SELECT DISTINCT
-  '%s' AS rsID,
-  rg.`Tissue name` AS Tissue,
-  rg.`Disease name` AS Disease_name,
-  rg.`Disease_id` AS Disease_id,
-  rc.`Risk CREs` AS CRE,
-  rg.`Risk Genes` AS Gene,
-  rg.`ZSTAT` AS Weight
-FROM
-  `Risk Gene` rg
-LEFT JOIN `Risk CRE` rc
-  ON rg.`Tissue name` = rc.`Tissue name`
-  AND rg.`Disease_id` = rc.`Disease_id`
-  AND rg.`Risk Genes` = rc.`Risk Genes`
-WHERE
-  rg.`Tissue name` = '%s'
-  AND rg.`Disease_id` = '%s'
-  AND (
-    rg.`SNPs` LIKE '%%%%%s%%%%'
-    OR rc.`SNPs` LIKE '%%%%%s%%%%'
-  )",                     rsid, selected_tissue, selected_disease, rsid, rsid
+      '%s' AS rsID,
+      rg.`Tissue name` AS Tissue,
+      rg.`Disease name` AS Disease_name,
+      rg.`Disease_id` AS Disease_id,
+      rc.`Risk CREs` AS CRE,
+      rg.`Risk Genes` AS Gene,
+      rg.`ZSTAT` AS Weight
+    FROM
+      `Risk Gene` rg
+    LEFT JOIN `Risk CRE` rc
+      ON rg.`Tissue name` = rc.`Tissue name`
+      AND rg.`Disease_id` = rc.`Disease_id`
+      AND rg.`Risk Genes` = rc.`Risk Genes`
+    WHERE
+      rg.`Tissue name` = '%s'
+      AND rg.`Disease_id` = '%s'
+      AND (
+        rg.`SNPs` LIKE '%%%%%s%%%%'
+        OR rc.`SNPs` LIKE '%%%%%s%%%%'
+      )",
+                     rsid, selected_tissue, selected_disease, rsid, rsid
     )
-    
-    
     
     cursor <- conn$cursor()
     cursor$execute(query)
-    snp_filtered_data <- cursor$fetchall()
+    results <- cursor$fetchall()
     
+    if (length(results) == 0) return(NULL)
     
-    if (length(snp_filtered_data) == 0) {
-      output$snp_result_table <- renderTable({
-        data.frame(Message = "No results found")
-      })
-    } else {
-      snp_filtered_data_df <- data.frame(matrix(unlist(snp_filtered_data), ncol = length(snp_filtered_data[[1]]), byrow = TRUE))
-      colnames(snp_filtered_data_df) <- c("rsID", "Tissue", "Disease name", "Disease ID", "CRE", "GENE", "Weight")  
-      
-      
-      output$snp_result_table <- renderTable({
-        snp_filtered_data_df
-      },width = "auto")
-    }
+    df <- data.frame(matrix(unlist(results), ncol = length(results[[1]]), byrow = TRUE))
+    colnames(df) <- c("rsID", "Tissue", "Disease_name", "Disease_ID", "CRE", "GENE", "Weight")
+    df
   })
   
+  observeEvent(input$submit, {
+    
+    
+    shinyWidgets::show_alert(
+      title = "Searching...",
+      text = "Query is running, please wait.",
+      type = "info",
+      timer = 5000,        # 自动消失时间，毫秒
+      showConfirmButton = FALSE
+    )
+    
+    df <- snp_filtered_data_df()
+    
+    if (is.null(df)) {
+      output$snp_result_table <- renderDT({
+        datatable(data.frame(Message = "No results found"), options = list(dom = 't'))
+      })
+    } else {
+      df_display <- df
+      df_display$rsID <- paste0(
+        '<a href="https://www.ncbi.nlm.nih.gov/snp/?term=',
+        df$rsID,
+        '" target="_blank">',
+        df$rsID,
+        '</a>'
+      )
+      
+      output$snp_result_table <- renderDT({
+        datatable(df_display, escape = FALSE, options = list(pageLength = 10, scrollX = TRUE))
+      })
+    }
+  })
   
   output$snp_download_result <- downloadHandler(
     filename = function() {
       paste("risk_snps_result_", Sys.Date(), ".csv", sep = "")
     },
     content = function(file) {
-      selected_disease <- input$disease
-      selected_tissue <- input$tissue
-      rsid <- input$rsid
-      
-      
-      query <- sprintf("SELECT * FROM snp_data WHERE `Disease_id` = '%s' AND `Tissue` = '%s' AND `rsID` = '%s'",
-                       selected_disease, selected_tissue, rsid)
-      
-      
-      cursor <- conn$cursor()
-      cursor$execute(query)
-      snp_filtered_data <- cursor$fetchall()
-      snp_filtered_data_df <- data.frame(matrix(unlist(snp_filtered_data), ncol = length(snp_filtered_data[[1]]), byrow = TRUE))
-      if (length(snp_filtered_data) == 0) {
+      df <- snp_filtered_data_df()
+      if (is.null(df)) {
         write.csv(data.frame(Message = "No results found"), file, row.names = FALSE)
       } else {
-        snp_filtered_data_df <- as.data.frame(snp_filtered_data)
-        colnames(snp_filtered_data_df) <- c("rsID", "Tissue", "Disease name", "Disease ID", "CRE", "GENE", "Weight") 
-        write.csv(snp_filtered_data_df, file, row.names = FALSE)
+        write.csv(df, file, row.names = FALSE)
       }
     }
   )
   
-  onStop(function() {
-    cursor$close()
-    conn$close()
-  })
+onStop(function() {
+  cursor$close()
+  conn$close()
+})
   
   #######################END###########################  
   
@@ -596,7 +604,7 @@ WHERE
       cell_data$logPval <- -log10(cell_data$assoc_mcp)
       
       
-      cell_data$mark <- ifelse(cell_data$assoc_mcp < 0.05, "*", "")
+      cell_data$mark <- ifelse(cell_data$assoc_mcp < 0.1, "*", "")
       
       
       ggplot(cell_data, aes(x = Cell_type, y = Disease_id, fill = logPval)) +
@@ -688,137 +696,219 @@ WHERE
     DT::datatable(df, selection = "multiple", options = list(pageLength = 10), rownames = FALSE)
   })
   
+  
   output$download_selected <- downloadHandler(
     filename = function() {
-      
-      fname <- paste0("Cell2CRE_gene_snp_", input$cell_tissue_input, "_", 
-                      input$celltype_input_single, "_", input$cell_disease_input_single, ".csv")
-      gsub("[^A-Za-z0-9_.-]", "_", fname)
+      paste0("Cell2CRE_gene_snp_", input$cell_tissue_input, "_", 
+             input$celltype_input_single, "_", input$cell_disease_input_single, ".tar.gz")
     },
     content = function(file) {
+  
+      tmpdir <- tempdir()
+      
+     
       df <- cre_data_reactive()
       req(df)
       
-     
       df_clean <- as.data.frame(lapply(df, function(x) if (is.list(x)) unlist(x) else x),
                                 stringsAsFactors = FALSE)
       
-      write.csv(df_clean, file, row.names = FALSE)
+      main_filename <- "CRE_Gene_SNP.csv"
+      main_path <- file.path(tmpdir, main_filename)
+      write.csv(df_clean, main_path, row.names = FALSE)
+      
+
+      query_cre <- paste0("SELECT CRE FROM CellType_Peak WHERE `Tissue name` = '", 
+                          input$cell_tissue_input, 
+                          "' AND cell_type = '", input$celltype_input_single, "'")
+      cursor <- conn$cursor()
+      cursor$execute(query_cre)
+      cre_list <- unlist(lapply(cursor$fetchall(), function(x) x[[1]]))
+      
+      df_cre <- data.frame(CRE = cre_list, stringsAsFactors = FALSE)
+      cre_filename <- "CRE_List.csv"
+      cre_path <- file.path(tmpdir, cre_filename)
+      write.csv(df_cre, cre_path, row.names = FALSE)
+      
+
+      tarfile <- file
+      old_wd <- getwd()
+      setwd(tmpdir)
+      tar(tarfile = tarfile, files = c(main_filename, cre_filename), compression = "gzip")
+      setwd(old_wd)
     }
   )
+  
   
   ######################END###########################
   
   #######################PATHWAY SERVER###########################
+
+  display_mode <- reactiveVal("")
+  cached_result <- reactiveVal(NULL)
+  
+  output$plot_button_ui <- renderUI({
+    res <- cached_result()
+    if (!is.null(res) && !is.null(res@result) && nrow(res@result) > 0) {
+      actionButton("display_plot", "Plot Selected Terms", class = "btn btn-secondary")
+    } else {
+      NULL
+    }
+  })
+  
+
+  observeEvent(c(input$go_tissue_input, input$go_disease_input), {
+    cached_result(NULL)
+    updateProgressBar(session, id = "progress", value = 0)
+  })
+  
+ 
   observeEvent(input$display_results, {
-    output$enrichment_output <- renderUI({
-      DTOutput("enrichment_results")  
-    })
+    #show_alert("Loading enrichment table...", type = "info", timer = 1000)
+    display_mode("table")
+    cached_result(enrichment_result())
   })
   
   observeEvent(input$display_plot, {
-    output$enrichment_output <- renderUI({
-      plotOutput("enrichment_plot")  
-    })
+    #show_alert("Generating enrichment plot...", type = "info", timer = 1000)
+    display_mode("plot")
+    cached_result(enrichment_result())
   })
   
-  observeEvent(c(input$go_tissue_input, input$go_disease_input), {
-    updateProgressBar(session = session, id = "progress", value = 0)
+  output$enrichment_output <- renderUI({
+    if (display_mode() == "table") {
+      DTOutput("enrichment_results")
+    } else if (display_mode() == "plot") {
+      plotOutput("enrichment_plot", height = "500px")
+    } else {
+      #tags$p("Wait")
+    }
   })
   
   
   enrichment_result <- reactive({
-    req(input$go_tissue_input, input$go_disease_input)  
-    
+    req(input$go_tissue_input, input$go_disease_input)
     
     selected_tissue <- input$go_tissue_input
     selected_disease <- input$go_disease_input
     
+ 
     query <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                      selected_tissue, selected_disease)
-    
     cursor <- conn$cursor()
     cursor$execute(query)
     gene_result <- cursor$fetchall()
     
-    updateProgressBar(session = session, id = "progress", value = 30)  
+    updateProgressBar(session, id = "progress", value = 30)
     
     if (length(gene_result) == 0) {
-      print("No genes found in database.")
-      updateProgressBar(session = session, id = "progress", value = 100)  
+      updateProgressBar(session, id = "progress", value = 100)
       return(NULL)
     }
-    
-    
-    filtered_data <- data.frame(matrix(unlist(gene_result), ncol = length(gene_result[[1]]), byrow = TRUE))
+    filtered_data <- data.frame(matrix(unlist(gene_result), ncol = 1, byrow = TRUE), stringsAsFactors = FALSE)
     colnames(filtered_data) <- c("Risk Genes")
-    gene_list <- unique(unlist(strsplit(as.character(filtered_data$`Risk Genes`), split = ",")))
+  
+    gene_str <- paste(filtered_data$`Risk Genes`, collapse = ",")
+    gene_list <- unlist(strsplit(gene_str, split = ","))
+    gene_list <- trimws(gene_list)  
     gene_list <- gene_list[!is.na(gene_list) & gene_list != ""]
-    gene_list <- as.character(gene_list)
-    gene_list<-na.omit(gene_list)
-    gene_list = sort(gene_list, decreasing = TRUE)
-    #updateProgressBar(session = session, id = "progress", value = 50)  
+    gene_list <- unique(as.character(gene_list))
     
     if (length(gene_list) == 0) {
-      print("Gene list is empty after processing.")
-      updateProgressBar(session = session, id = "progress", value = 100)  
+      updateProgressBar(session, id = "progress", value = 100)
       return(NULL)
     }
     
-    
-    enrichment_result <- tryCatch({
-      enrichGO(gene = gene_list, OrgDb = org.Hs.eg.db, keyType = "SYMBOL", ont = "BP",pvalueCutoff = 0.05, qvalueCutoff = 0.10,readable = T)
+  
+    result <- tryCatch({
+      enrichGO(
+        gene = gene_list,
+        OrgDb = org.Hs.eg.db,
+        keyType = "SYMBOL",
+        ont = "BP",
+        pvalueCutoff = 0.2,
+        #qvalueCutoff = 0.10,
+        readable = TRUE
+      )
     }, error = function(e) {
-      print(paste("enrichGO failed:", e$message))
+      print(paste("enrichGO error:", e$message))
       return(NULL)
     })
     
-    updateProgressBar(session = session, id = "progress", value = 80)  
-    
-    if (is.null(enrichment_result) || is.null(enrichment_result@result) || nrow(enrichment_result@result) == 0) {
-      print("No enrichment results found.")
-      updateProgressBar(session = session, id = "progress", value = 100)  
-      return(NULL)
-    }
-    
-    
-    updateProgressBar(session = session, id = "progress", value = 100) 
-    return(enrichment_result)
+    updateProgressBar(session, id = "progress", value = 100)
+    return(result)
   })
   
-  
+
   output$enrichment_results <- renderDT({
     res <- enrichment_result()
     if (is.null(res) || is.null(res@result) || nrow(res@result) == 0) {
-      return(data.frame(Message = "No significant enrichment found"))
+      return(datatable(data.frame(Message = "No significant enrichment found"), options = list(dom = 't')))
     }
     
-    return(res@result)  
+ 
+    result_df <- res@result
+    
+   
+    result_df <- subset(result_df, select = -c(BgRatio, p.adjust))
+    
+   #https://www.ebi.ac.uk/QuickGO/search/
+    result_df$ID <- paste0(
+      '<a href="https://www.ebi.ac.uk/QuickGO/search/', 
+      result_df$ID, 
+      '" target="_blank">', 
+      result_df$ID, 
+      '</a>'
+    )
+    
+
+    datatable(result_df, 
+              escape = FALSE,
+              options = list(pageLength = 10, scrollX = TRUE),
+              selection = "multiple")
+  })
+  
+  
+  selected_terms <- reactive({
+    res <- cached_result()
+    sel <- input$enrichment_results_rows_selected
+    if (!is.null(sel) && !is.null(res) && nrow(res@result) > 0) {
+      res@result[sel, ]
+    } else {
+      NULL
+    }
   })
   
   output$enrichment_plot <- renderPlot({
-    res <- enrichment_result()
+    res <- cached_result()
+    sel_rows <- input$enrichment_results_rows_selected
+    
     if (is.null(res) || is.null(res@result) || nrow(res@result) == 0) {
-      output$enrichment_output <- renderUI({
-        tags$p("No significant results available for visualization.")
-      })
-      return(NULL)
+      plot.new()
+      text(0.5, 0.5, "No significant enrichment to plot", cex = 1.5)
+    } else if (length(sel_rows) == 0) {
+      plot.new()
+      text(0.5, 0.5, "Please select one or more rows in the table to plot", cex = 1.2)
+    } else {
+   
+      sel_result <- res
+      sel_result@result <- res@result[sel_rows, ]
+      dotplot(sel_result, showCategory = nrow(sel_result@result))
     }
-    #emapplot(res)
-    goplot(res, showCategory = 10)
   })
   
-  # Downloads
+  
+
   output$download_enrichment <- downloadHandler(
     filename = function() {
       paste0("GO_Enrichment_", input$go_tissue_input, "_", input$go_disease_input, ".csv")
     },
     content = function(file) {
-      res <- enrichment_result()
-      if (is.null(res)) {
-        write.csv(data.frame(Message = "No significant enrichment found"), file, row.names = FALSE)
-      } else {
+      res <- cached_result()
+      if (!is.null(res) && !is.null(res@result) && nrow(res@result) > 0) {
         write.csv(res@result, file, row.names = FALSE)
+      } else {
+        write.csv(data.frame(Message = "No significant enrichment found"), file, row.names = FALSE)
       }
     }
   )
