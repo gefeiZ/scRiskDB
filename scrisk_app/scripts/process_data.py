@@ -23,10 +23,10 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    # 读取 ATAC 或 RNA 风险数据
+   
     df_risk = load_risk_data(args.risk_data)
 
-    # 读取 scRNA-seq 数据
+  
     adata = sc.read_h5ad(args.file)
     #sc.pp.normalize_total(adata, target_sum=1e4)
     #sc.pp.log1p(adata)
