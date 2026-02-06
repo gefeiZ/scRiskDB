@@ -3,47 +3,13 @@
 
 ui <- tagList(
   
-  
-  tags$div(
-    id = "topBanner",
-    style = "
-    background-color: #f1f1f1;
-    font-size: 13px;
-    color: #666;
-    border-bottom: 1px solid #ccc;
-    position: relative;
-    padding: 6px 12px;
-  ",
-
-    tags$div(
-      style = "text-align: center;",
-      "SCRISKDB 数据记录"
-    ),
-
-    tags$span(
-      id = "hideBannerBtn",
-      style = "
-      position: absolute;
-      top: 4px;
-      right: 10px;
-      cursor: pointer;
-      color: #888;
-      font-size: 12px;
-    ",
-      icon("times"), "关闭",
-      onclick = "document.getElementById('topBanner').style.display='none';"
-    )
-  ),
-  
-
-  
   dashboardPage(
   
   skin = "purple",
-  # Header
-  dashboardHeader(title = " "),
+
+  dashboardHeader(title = "scRiskDB 数据记录"),
   
-  # Sidebar
+ 
   dashboardSidebar(
     sidebarMenu(id = "tabs",
                 menuItem("Home", tabName = "home", icon = icon("home")),
@@ -54,8 +20,9 @@ ui <- tagList(
                          menuSubItem("Explore Risk Cells", tabName = "cell")),
                          
                 menuItem("Analysis Tools", icon = icon("chart-bar"),
-                         menuSubItem("Cell Scoring", tabName = "more_analysis"),
-                         menuSubItem("SNV to Function", tabName = "geneset")),
+                         menuSubItem("SNV to Function (Pathways)", tabName = "geneset"),
+                         menuSubItem("Cell Scoring", tabName = "more_analysis")),
+                         
                 
                 menuItem("Help", tabName = "help", icon = icon("question-circle")),
                 menuItem("Contact", tabName = "contact", icon = icon("envelope")),
@@ -65,26 +32,147 @@ ui <- tagList(
   # Main body
   dashboardBody(
     
-    #### CSS style ####
+
+    #### CSS style & Script ####
     tags$head(
+      
+   
       tags$style(HTML("
-      .custom-title {
-        font-size: 24px; 
-        color: #2C3E50; 
-        background-color: #ebf7fa; 
-        padding: 10px; 
-        text-align: center;
-        border-radius: 5px; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-        margin-bottom: 20px;
-      }
-      .custom-download-button:hover {
-      background-color: #a9f5cc;  
-    }
-    "))
-    ),
+
+        .custom-title {
+          font-size: 24px; 
+          color: #2C3E50; 
+          background-color: #ebf7fa; 
+          padding: 10px; 
+          text-align: center;
+          border-radius: 5px; 
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+          margin-bottom: 20px;
+        }
+        .custom-download-button:hover {
+          background-color: #a9f5cc;  
+        }
+
+
+        
+ 
+        .help-box {
+          background-color: #ffffff;      
+          border-top: 3px solid #605ca8;  
+          border-radius: 3px;           
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+          padding: 30px;                 
+          height: 75vh;                  
+          overflow-y: auto;              
+          margin-bottom: 20px;           
+        }
+        
+        
+
+        .well .nav-header {
+          font-size: 12px;          
+          font-weight: 700;         
+          color: #888888;            
+          text-transform: uppercase; 
+          letter-spacing: 1px;      
+          margin-top: 25px;         
+          margin-bottom: 10px;      
+          padding-left: 15px;      
+          border-bottom: 1px solid #eee; 
+          padding-bottom: 5px;      
+        }
+        
+        .well .nav-header:first-child {
+          margin-top: 0px;
+        }
+        
+   
+        .well {
+          background-color: #ffffff;     
+          border: none;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+   
+        .nav-pills > li.active > a, 
+        .nav-pills > li.active > a:focus, 
+        .nav-pills > li.active > a:hover {
+          background-color: #605ca8;      
+          color: white;
+        }
+      ")),  
+      
+ 
+      tags$script(HTML("
+        function copyToClipboard(text) {
+          var textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-9999px';
+          textArea.style.top = '0';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            var successful = document.execCommand('copy');
+            if(successful) {
+              alert('Copied: ' + text);
+            } else {
+              console.error('Copy failed.');
+            }
+          } catch (err) {
+            console.error('Unable to copy', err);
+          }
+          document.body.removeChild(textArea);
+        }
+      ")), 
+      
     
-    
+      tags$script(HTML("
+        function jumpToOpenTargets(geneSymbol) {
+       
+          const apiUrl = 'https://api.platform.opentargets.org/api/v4/graphql';
+          
+        
+          const query = `
+            query {
+              search(queryString: \"${geneSymbol}\", entityNames: [\"target\"], page: {index: 0, size: 1}) {
+                hits {
+                  id
+                  entity
+                }
+              }
+            }
+          `;
+  
+     
+          fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query })
+          })
+          .then(response => response.json())
+          .then(data => {
+        
+            const hits = data.data.search.hits;
+            
+            if (hits.length > 0) {
+              const targetId = hits[0].id;
+           
+              window.open('https://platform.opentargets.org/target/' + targetId + '/associations', '_blank');
+            } else {
+        
+              window.open('https://platform.opentargets.org/search?q=' + geneSymbol, '_blank');
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            window.open('https://platform.opentargets.org/search?q=' + geneSymbol, '_blank');
+          });
+        }
+      ")) 
+      
+    ), 
     
     tabItems(
       ############### HOME ######################
@@ -135,7 +223,7 @@ ui <- tagList(
               tags$hr(style = "border:none; border-top:5px solid #5E81AC;"),
               fluidRow(
                 box(title = "Latest database update", status = "primary", solidHeader = TRUE, 
-                    collapsible = TRUE, collapsed = TRUE, p("Version 2024.10")),
+                    collapsible = TRUE, collapsed = TRUE, p("Version 2026.01")),
                 box(title = "Reference", status = "primary", solidHeader = TRUE, 
                     collapsible = TRUE, collapsed = TRUE, p("Gefei Zhao, Binbin Lai
                                                             
@@ -164,17 +252,18 @@ ui <- tagList(
                 mainPanel(
                   DTOutput("snp_result_table"))),
               tags$hr(style = "border:none; border-top:5px solid #caf2bb;"),
-              fluidRow(
+            fluidRow(
                 tags$div(style = "margin: 20px;", 
                          downloadButton(outputId = "snp_download_result", label = "Download Results", class = "custom-download-button"))
               ),
               tags$div(
                 style = "position: absolute; bottom: 20px; right: 20px;",
-                actionButton("return_home", "HOME", class = "btn btn-primary")
+                actionButton("return_home_snp", "HOME", class = "btn btn-primary")
               )
       ),
       
       
+    
       
       ################## SUB GENES ################
       tabItem(tabName = "gene", 
@@ -194,8 +283,14 @@ ui <- tagList(
                                    choices = disease_choices_df, selected = disease_choices_df[1]))
               ),
               # results table
-              fluidRow(tags$div(style = "margin: 20px;",  # 
-                                DTOutput(outputId = 'result_table'))),
+              fluidRow(
+                column(width = 12,
+                       box(
+                         title = "Risk Gene List", status = "primary", solidHeader = TRUE, width = NULL,
+                         DTOutput(outputId = 'result_table')
+                       )
+                )
+              ),
               
               
               br(),br(),
@@ -344,7 +439,7 @@ ui <- tagList(
               #bottom back home 
               tags$div(
                 style = "position: absolute; bottom: 20px; right: 20px;",
-                actionButton("return_home", "HOME", class = "btn btn-primary")
+                actionButton("return_home_geneset", "HOME", class = "btn btn-primary")
               )
       ),
       ################## END #######################
@@ -415,61 +510,111 @@ ui <- tagList(
       
       ################## END #######################
       
-      
+
       ################## SUB MORE Analysis ####################
       tabItem(tabName = "more_analysis", 
-              tags$h2(class = "custom-title", "Analysis Your Single-Cell Analysis"),
+              tags$h2(class = "custom-title", "Analyze Your Single-Cell Data"),
               p("Here you can explore high-risk celltypes of your own single cell data"),
               tags$hr(style = "border:none; border-top:5px solid #caf2bb;"),
               
-              wellPanel(
-                fileInput("file1", "Choose your .h5ad File", accept = c(".h5ad")),
-                textInput("group_id", "Group By ID:", value = "celltype (Should in adata.obs)"),
-                
-                fluidRow(
-                  column(6, 
+          
+              fluidRow(
+                column(width = 12,
+                       box(
+                         title = "Upload & Submit", 
+                         status = "info", 
+                         solidHeader = TRUE, 
+                         width = NULL, 
+                         
+                  
+                         fileInput("file1", "Choose your .h5ad File", accept = c(".h5ad")),
+                         textInput("group_id", "Group By ID:", value = "celltype"),
+                         p(style="font-size: 12px; color: grey; margin-top: -10px; margin-bottom: 15px;", 
+                           "(Note: This column name must exist in adata.obs)"),
+                         
+              
                          selectInput("data_type", "Select Data Type:", 
                                      choices = c("Single Cell RNA-seq" = "rna", "Single Cell ATAC-seq" = "atac"),
-                                     selected = "rna"))
+                                     selected = "rna"),
+                         
+                   
+                         conditionalPanel(
+                           condition = "input.data_type != 'atac'", 
+                           wellPanel(
+                             style = "background: #f9f9f9; border-left: 3px solid #00c0ef;",
+                             selectInput("disease_select", "Select Disease:", choices = disease_choices_df, selected = disease_choices_df[1]),
+                             selectInput("tissue_select", "Select Tissue:", choices = tissue_choices_df, selected = tissue_choices_df[1])
+                           )
+                         ),
+                         
+                    
+                         conditionalPanel(
+                           condition = "input.data_type == 'atac'", 
+                           wellPanel(
+                             style = "background: #f9f9f9; border-left: 3px solid #00c0ef;",
+                             
+                             
+                             fileInput("gs_upload", "Upload Calculated Risk Data"),
+                    
+                             div(style = "margin-top: -15px; margin-bottom: 10px;",
+                                 actionLink("jump_to_help_atac", 
+                                            label = "How to prepare ATAC risk data? (Step-by-step Tutorial)", 
+                                            icon = icon("question-circle"),
+                                            style = "color: #d9534f; font-weight: bold; text-decoration: underline; font-size: 13px;")
+                             ),
+                             tags$hr(style = "margin: 10px 0;"),
+                             strong("Download Template"), br(),
+                      
+                             downloadButton("download_template", "Download File Template (.csv)", class = "btn btn-default btn-xs", style = "margin-bottom: 10px;"),
+                             
+                             
+                      
+
+                           )
+                         ),
+                         
+                         tags$br(),
+                         
+                  
+                         div(style = "text-align: center; margin-top: 15px;",
+                             actionButton("submit_analysis", "Submit Analysis", 
+                                  
+                                          class = "btn btn-info", 
+                                      
+                                          style = "width: 200px; font-weight: bold; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.15);"
+                             )
+                         ),
+                   
+                         uiOutput("submission_feedback") 
+                       )
                 )
               ),
               
-            
-              conditionalPanel(
-                condition = "input.data_type != 'atac'",
-                wellPanel(
-                  selectInput("disease_select", "Select Disease:", choices = c("Disease1", "Disease2")),
-                  selectInput("tissue_select", "Select Tissue:", choices = c("Tissue1", "Tissue2"))
+ 
+              fluidRow(
+                column(width = 12,
+                       box(
+                         title = "Check Status & Download", 
+                         status = "success", 
+                         solidHeader = TRUE, 
+                         width = NULL,
+                         
+                         p("Enter your Task ID below to retrieve results (even after closing the page)."),
+                         
+                   
+                         div(class = "input-group", style = "width: 100%; max-width: 600px; margin: 0 auto;",
+                             tags$span(class = "input-group-addon", icon("search")),
+                             textInput("task_id_input", label = NULL, placeholder = "Paste your Task ID here (e.g., b119c6b6...)", width = "100%")
+                         ),
+                         tags$br(),
+                         
+                    
+                         uiOutput("status_card_ui"),
+                         
+               
+                         uiOutput("download_ui_polished")
+                       )
                 )
-              ),
-              
-              conditionalPanel(
-                condition = "input.data_type == 'atac'",
-                wellPanel(
-                  fileInput("gs_upload", "Upload ATAC Risk Data (CRE ZSTAT)")
-                )
-              ),
-              
-              verbatimTextOutput("risk_data_status"),
-              
-              wellPanel(
-                actionButton("submit_analysis", "Submit Analysis", 
-                             class = "btn btn-info", style = "width: 100%"),
-                
-                tags$hr(),
-                
-                
-                strong("Your Task ID:"),
-                verbatimTextOutput("task_id_output"),
-                
-                textInput("task_id_input", "Enter Task ID to Check Status:", value = ""),
-                
-                strong("Status:"),
-                verbatimTextOutput("run_status"),
-                
-                #downloadButton("download_task", "Download Results", class = "btn btn-success", style = "width: 100%")
-                uiOutput("download_ui")
-                
               )
       ),
       
@@ -477,23 +622,93 @@ ui <- tagList(
       ################## END #######################
       
       
-      
+
       ################HELP###########################
       tabItem(
         tabName = "help",
-        box(
-          title = "Help & Documentation", status = "warning", solidHeader = TRUE, width = 12,
-          withMathJax(),
-          div(
-            includeMarkdown("www/help.md"),
-            style = "max-height: 75vh; overflow-y: auto; padding-right: 10px;"
-          )
-        ),
+        
+        fluidRow(
+  
+          column(width = 12, 
+                 
+                 tags$h2(class = "custom-title", "User Guide & Documentation"),
+                 
+                 navlistPanel(
+                   id = "help_nav",
+                   widths = c(2, 10), 
+                   well = TRUE,       
+                   
+         
+                   "Overview",
+                   tabPanel("Introduction", icon = icon("info-circle"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_intro.md")
+                            )
+                   ),
+                   tabPanel("Data Sources", icon = icon("database"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_data.md")
+                            )
+                   ),
+                   
+     
+                   "Repository Features",
+               
+                   tabPanel("SNV to Risk Genes", icon = icon("dna"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_gene.md")
+                            )
+                   ),
+                   tabPanel("SNV to Risk CREs", icon = icon("project-diagram"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_cre.md")
+                            )
+                   ),
+                   tabPanel("Pathways & Critical Cells", icon = icon("chart-pie"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_plots.md")
+                            )
+                   ),
+                   tabPanel("Focus on SNV", icon = icon("play"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_snv.md")
+                            )
+                   ),
+                
+                   "Analysis Tools",
+                 
+                   tabPanel("Analyze My Data (Scoring)", icon = icon("calculator"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_analysis.md")
+                            )
+                   ),
+                   
+                
+                   "Support",
+                 
+                   tabPanel("FAQ & Troubleshooting", icon = icon("question-circle"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_faq.md")
+                            )
+                   ),
+                   tabPanel("Citation", icon = icon("quote-left"),
+                            div(class = "help-box", 
+                                includeMarkdown("www/help_citation.md")
+                            )
+                   )
+                 ) # end navlistPanel
+          ) # end column
+        ), # end fluidRow
+        
+
         tags$div(
-          style = "position: absolute; bottom: 20px; right: 20px;",
-          actionButton("return_home", "HOME", class = "btn btn-primary")
+          style = "position: fixed; bottom: 20px; right: 30px; z-index: 100;",
+          actionButton("return_home_help", "HOME", class = "btn btn-primary", 
+                       style = "box-shadow: 0 2px 5px rgba(0,0,0,0.2);") 
         )
       ),
+      ################# END ########################
+
       ################# END ########################    
       
       
@@ -543,10 +758,15 @@ tags$div(
       z-index: 1000;
     ",
   HTML('
-      scRsikDB数据记录 |
-      <a href="https://beian.miit.gov.cn/" target="_blank" style="color: #6c757d; text-decoration: none;">
-        京ICP备2025121216号
-      </a>
-    ')
+    scRiskDB 数据记录 |
+    <a href="https://beian.miit.gov.cn/" target="_blank" style="color: #6c757d; text-decoration: none;">
+      京ICP备2025121216号
+    </a> |
+    <img src="https://www.beian.gov.cn/img/ghs.png" style="vertical-align: middle; height: 8px; margin-left: 5px;"/>
+    <a href="https://beian.mps.gov.cn/#/query/webSearch?code=11010802045893" 
+       rel="noreferrer" target="_blank" style="color: #6c757d; text-decoration: none; margin-left: 3px;">
+      京公网安备11010802045893号
+    </a>
+  ')
 )
 )
