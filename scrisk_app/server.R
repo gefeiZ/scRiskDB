@@ -41,9 +41,7 @@ server <- function(input, output,session) {
   observeEvent(input$file_sub, {
     req(input$file_sub)
     
-
     uploaded_files <- input$file_sub
-    
     for (i in 1:nrow(uploaded_files)) {
       file.copy(uploaded_files$datapath[i],
                 file.path(save_path, uploaded_files$name[i]))
@@ -83,10 +81,10 @@ server <- function(input, output,session) {
     updateTabItems(session, "tabs", "more_analysis")  
   })
   
-  observeEvent(input$return_home, {
+
+  observeEvent(c(input$return_home_snp, input$return_home_geneset, input$return_home_help), {
     updateTabItems(session, "tabs", "home")
   })
-  
   
   
   ####################### SNV SERVER###########################
@@ -140,7 +138,7 @@ server <- function(input, output,session) {
       title = "Searching...",
       text = "Query is running, please wait.",
       type = "info",
-      timer = 5000,       
+      timer = 5000,        
       showConfirmButton = FALSE
     )
     
@@ -165,6 +163,7 @@ server <- function(input, output,session) {
       })
     }
   })
+
   
   output$snp_download_result <- downloadHandler(
     filename = function() {
@@ -180,6 +179,7 @@ server <- function(input, output,session) {
     }
   )
   
+  
 onStop(function() {
   cursor$close()
   conn$close()
@@ -187,37 +187,115 @@ onStop(function() {
   
   #######################END###########################  
   
-  ######################## GENE SERVER ###############################
-  output$result_table <- renderDT({
-    selected_tissue <- input$gene_tissue_input
-    selected_disease <- input$gene_disease_input
-    
-    
-    query <- sprintf("SELECT * FROM `Risk Gene` WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
-                     selected_tissue, selected_disease)
-    
-    
-    cursor <- conn$cursor()
-    cursor$execute(query)  
-    
-    
-    gene_result <- cursor$fetchall()
-    
-    
-    if (length(gene_result) == 0) {
-      return(data.frame(Message = "No results found"))
-    }
-    
-    
-    if (length(gene_result) > 0 && length(gene_result[[1]]) > 0) {
-      filtered_data <- data.frame(matrix(unlist(gene_result), ncol = length(gene_result[[1]]), byrow = TRUE))
-      colnames(filtered_data) <- c("Tissue name","Disease ID","Disease name", "Risk Genes", "Pval", "ZSTAT", "SNPs")  
-      return(filtered_data)
-    } else {
-      return(data.frame(Message = "Data format error"))
-    }
-  })
+
+######################## GENE SERVER ###############################
+
+output$result_table <- renderDT({
+  selected_tissue <- input$gene_tissue_input
+  selected_disease <- input$gene_disease_input
   
+  query <- sprintf("SELECT * FROM `Risk Gene` WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
+                   selected_tissue, selected_disease)
+  
+  cursor <- conn$cursor()
+  cursor$execute(query)  
+  gene_result <- cursor$fetchall()
+  
+  if (length(gene_result) == 0) {
+    return(datatable(data.frame(Message = "No results found"), options = list(dom = 't')))
+  }
+  
+  if (length(gene_result) > 0 && length(gene_result[[1]]) > 0) {
+    
+    filtered_data <- data.frame(matrix(unlist(gene_result), ncol = length(gene_result[[1]]), byrow = TRUE), stringsAsFactors = FALSE)
+  
+    colnames(filtered_data) <- c("Tissue name","Disease ID","Disease name", "Risk Genes", "Pval", "ZSTAT", "SNPs")  
+    
+
+    filtered_data$`Risk Genes` <- paste0(
+      '<a href="javascript:void(0);" ', 
+      'onclick="jumpToOpenTargets(\'', filtered_data$`Risk Genes`, '\');" ',
+      'style="font-weight: bold; color: #3c8dbc; text-decoration: none; cursor: pointer;" ', # 类似超链接的样式
+      'title="Validation in Open Targets">',
+      filtered_data$`Risk Genes`, 
+      ' <i class="fa fa-external-link-alt" style="font-size: 0.7em; color: #999;"></i>', # 加个极小的图标提示这是外链
+      '</a>'
+    )
+    
+
+    snps_to_copy <- sapply(strsplit(as.character(filtered_data$SNPs), ","), function(x) {
+      top_snps <- head(x, 10)
+      paste(top_snps, collapse = " ") 
+    })
+    
+    ld_url <- "https://ldlink.nih.gov/ldexpress"
+    
+    filtered_data$Validation <- paste0(
+      '<div style="display: inline-flex; align-items: center; justify-content: center; width: 100%;">',
+      
+
+      '<button class="btn btn-default btn-xs" ',
+      'style="border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -1px; height: 24px;" ', 
+      'onclick="copyToClipboard(\'', snps_to_copy, '\');" ', 
+      'title="Copy Top 10 SNPs">',
+      '<i class="fa fa-copy"></i>',
+      '</button>',
+      
+  
+      '<a href="', ld_url, '" target="_blank" class="btn btn-info btn-xs" ',
+      'style="border-top-left-radius: 0; border-bottom-left-radius: 0; color: white; height: 24px; display: flex; align-items: center;" ',
+      'title="Go to LDexpress">',
+      ' Check LD <i class="fa fa-external-link-alt" style="margin-left: 4px;"></i>',
+      '</a>',
+      
+      '</div>'
+    )
+    
+
+    filtered_data <- filtered_data[, c("Tissue name", "Risk Genes", "Pval", "ZSTAT", "Validation", "SNPs", "Disease name")]
+    
+    datatable(filtered_data, 
+              escape = FALSE, 
+              rownames = FALSE,
+              selection = "single",
+              options = list(
+                pageLength = 10, 
+                scrollX = TRUE,      
+                autoWidth = FALSE,   
+                deferRender = TRUE,
+                
+                columnDefs = list(
+      
+                  list(targets = 4, width = '130px', className = 'dt-center'), 
+                  
+              
+                  list(targets = 1, className = 'dt-center'), 
+                  
+     
+                  list(
+                    targets = 5, 
+                    width = '250px', 
+                    render = JS(
+                      "function(data, type, row, meta) {",
+                      "  if (type === 'display' && data != null) {",
+                      "    if (data.length > 20) {", 
+                      "      return '<span title=\"' + data + '\">' + data.substr(0, 20) + '...</span>';", 
+                      "    } else {",
+                      "      return data;",
+                      "    }",
+                      "  }",
+                      "  return data;",
+                      "}"
+                    )
+                  ),
+                  list(targets = "_all", className = 'dt-center')
+                )
+              ))
+    
+  } else {
+    datatable(data.frame(Message = "Data format error"), options = list(dom = 't'))
+  }
+})
   
   
   
@@ -259,14 +337,14 @@ onStop(function() {
     selected_tissue_raw <- input$gene_tissue_input
     selected_disease <- input$gene_disease_input
     
-
+ 
     tissue_base <- sub("\\(.*\\)", "", selected_tissue_raw)
-    tissue_base <- trimws(tissue_base)  
+    tissue_base <- trimws(tissue_base) 
     
     tissue_adult <- paste0(tissue_base, "(Adult)")
     tissue_fetal <- paste0(tissue_base, "(Fetal)")
     
-
+ 
     query_adult_gene <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` 
                           WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                                 tissue_adult, selected_disease)
@@ -283,7 +361,7 @@ onStop(function() {
     fetal_result_gene <- cursor$fetchall()
     fetal_genes <- unique(unlist(lapply(fetal_result_gene, `[[`, 1)))
     
-    
+
 
     adult_specific_gene <- setdiff(adult_genes, fetal_genes)
     fetal_specific_gene <- setdiff(fetal_genes, adult_genes)
@@ -318,8 +396,7 @@ onStop(function() {
       tissue_base <- trimws(tissue_base)
       tissue_adult <- paste0(tissue_base, "(Adult)")
       tissue_fetal <- paste0(tissue_base, "(Fetal)")
-      
-
+  
       query_adult_gene <- sprintf("SELECT `Risk Genes` FROM `Risk Gene` 
                             WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                                   tissue_adult, selected_disease)
@@ -352,35 +429,141 @@ onStop(function() {
     }
   ) 
   
+
   ####################### CRE SERVER ###############################
   output$cre_result_table <- renderDT({
     selected_tissue <- input$cre_tissue_input
     selected_disease <- input$cre_disease_input
     
-   
+
     query <- sprintf("SELECT * FROM `Risk CRE` WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
                      selected_tissue, selected_disease)
     
-   
     cursor <- conn$cursor()
     cursor$execute(query)  
-    
-
     cre_result <- cursor$fetchall()
     
-    
-   
     if (length(cre_result) == 0) {
-      return(data.frame(Message = "No results found"))
+      return(datatable(data.frame(Message = "No results found"), options = list(dom = 't')))
     }
     
 
     if (length(cre_result) > 0 && length(cre_result[[1]]) > 0) {
-      cre_filtered_data <- data.frame(matrix(unlist(cre_result), ncol = length(cre_result[[1]]), byrow = TRUE))
-      colnames(cre_filtered_data) <- c("Tissue name","Disease ID","Disease name", "Risk CREs", "Risk Genes", "SNPs", "ZSTAT")  
-      return(cre_filtered_data)
+      cre_df <- data.frame(matrix(unlist(cre_result), ncol = length(cre_result[[1]]), byrow = TRUE), stringsAsFactors = FALSE)
+
+      colnames(cre_df) <- c("Tissue name","Disease ID","Disease name", "Risk CREs", "Risk Genes", "SNPs", "ZSTAT")  
+      
+
+      current_cre_list <- unique(cre_df$`Risk CREs`)
+
+      cre_in_sql <- paste0("'", paste(current_cre_list, collapse = "','"), "'")
+      
+      query_cell <- sprintf("SELECT CRE, cell_type FROM CellType_Peak WHERE `Tissue name` = '%s' AND CRE IN (%s)",
+                            selected_tissue, cre_in_sql)
+      
+      cursor$execute(query_cell)
+      cell_result <- cursor$fetchall()
+
+      cre_cell_map <- list()
+      if (length(cell_result) > 0) {
+        cell_df <- data.frame(matrix(unlist(cell_result), ncol = 2, byrow = TRUE), stringsAsFactors = FALSE)
+        colnames(cell_df) <- c("CRE", "CellType")
+
+        agg_cells <- aggregate(CellType ~ CRE, data = cell_df, paste, collapse = ", ")
+        cre_cell_map <- setNames(agg_cells$CellType, agg_cells$CRE)
+      }
+      
+   
+      cre_df$`Linked Cell Types` <- sapply(cre_df$`Risk CREs`, function(x) {
+        if (x %in% names(cre_cell_map)) {
+          types <- cre_cell_map[[x]]
+ 
+          return(paste0('<span class="label label-primary" style="font-size: 85%;">', 
+                        gsub(", ", '</span> <span class="label label-primary" style="font-size: 85%;">', types), 
+                        '</span>'))
+        } else {
+          return('<span style="color: grey;">N/A</span>') 
+        }
+      })
+      
+      
+
+      
+ 
+      cre_df$Validation <- sapply(cre_df$`Risk CREs`, function(cre_id) {
+   
+        parts <- strsplit(cre_id, "-")[[1]]
+        
+    
+        if (length(parts) >= 3) {
+          chrom <- parts[1]
+          start <- as.numeric(parts[2])
+          end <- as.numeric(parts[3])
+          
+
+          padding <- 100000
+          view_start <- max(0, start - padding) 
+          view_end <- end + padding
+          
+     
+          formatted_cre <- paste0(chrom, ":", view_start, "-", view_end)
+   
+          target_url <- "https://3dgenome.fsm.northwestern.edu/vis"
+   
+          paste0(
+            '<div style="display: inline-flex; align-items: center;">',
+            
+           
+            '<button class="btn btn-default btn-xs" ',
+            'style="border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -1px; height: 24px;" ', 
+            'onclick="copyToClipboard(\'', formatted_cre, '\');" ', 
+            'title="Copy Expanded Coordinates (±100kb): ', formatted_cre, '">',
+            '<i class="fa fa-copy"></i>', 
+            '</button>',
+            
+            '<a href="', target_url, '" target="_blank" class="btn btn-warning btn-xs" ',
+            'style="border-top-left-radius: 0; border-bottom-left-radius: 0; color: white; height: 24px; display: flex; align-items: center;" ',
+            'title="Go to 3D Genome Browser">',
+            '<i class="fa fa-external-link-alt" style="margin-right: 3px;"></i> 3D View',
+            '</a>',
+            
+            '</div>'
+          )
+        } else {
+          return("") 
+        }
+      })
+      
+
+      cre_df <- cre_df[, c("Tissue name", "Risk CREs", "Linked Cell Types", "Risk Genes", "SNPs", "ZSTAT", "Validation", "Disease name")]
+      
+  
+      datatable(cre_df, 
+                escape = FALSE, 
+                rownames = FALSE,
+                selection = "single",
+                options = list(
+                  pageLength = 10, 
+                  scrollX = TRUE,
+                  autoWidth = FALSE,
+                  deferRender = TRUE,
+                  columnDefs = list(
+                    list(targets = "_all", className = 'dt-center'),
+            
+                    list(targets = 2, width = '200px', 
+                         render = JS("function(data, type, row, meta) {
+                            if (type === 'display' && data != null && data.length > 100) {
+                              return '<div title=\"' + data.replace(/<[^>]+>/g, '') + '\">' + data.substring(0, 100) + '...</div>';
+                            }
+                            return data;
+                         }")),
+                  
+                    list(targets = 6, width = '100px')
+                  )
+                ))
+      
     } else {
-      return(data.frame(Message = "Data format error"))
+      datatable(data.frame(Message = "Data format error"), options = list(dom = 't'))
     }
   })
   
@@ -583,7 +766,7 @@ onStop(function() {
         )
       }))
       
-      # 加上这个判断
+      
       if (nrow(cell_data) == 0) {
         return(
           ggplot() +
@@ -652,7 +835,7 @@ onStop(function() {
     }
     req(input$cell_tissue_input, input$celltype_input_single, input$cell_disease_input_single)
     
-   
+  
     query_cre <- paste0("SELECT CRE FROM CellType_Peak WHERE `Tissue name` = '", input$cell_tissue_input, 
                         "' AND cell_type = '", input$celltype_input_single, "'")
     cursor <- conn$cursor()
@@ -666,7 +849,7 @@ onStop(function() {
     
     
     
-
+ 
     cre_in_clause <- paste0("'", paste(cre_list, collapse = "','"), "'")
     query_risk <- paste0(
       "SELECT `Risk CREs`, `Risk Genes`, `SNPs`,`Disease_id` FROM `Risk CRE` ",
@@ -914,161 +1097,212 @@ onStop(function() {
   )
   
   ######################END###########################
+  output$download_template <- downloadHandler(
+    filename = function() {
+      "Risk_CRE_Template.csv"
+    },
+    content = function(file) {
+ 
+      template_df <- data.frame(
+        CRE_ID = c("chr1-100-200", "chr2-500-600", "chr3-800-900"), 
+        ZSTAT = c(2.54, 1.89, 3.12),                
+        stringsAsFactors = FALSE
+      )
+      write.csv(template_df, file, row.names = FALSE)
+    }
+  )
   
+
+  observeEvent(input$jump_to_help_atac, {
+
+    updateTabItems(session, "tabs", "help")
+
+    updateTabsetPanel(session, "help_nav", selected = "Analyze My Data (Scoring)")
+    
+
+    shinyjs::runjs("
+      setTimeout(function() {
+     
+        $('details').attr('open', true);
+        
+     
+        var element = document.getElementsByTagName('details')[0];
+        if(element) {
+          element.scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+      }, 500); 
+    ")
+  })
   
   #######################SC_VAR SERVER###########################
   
   plan(multisession)
   
-  
-
   task_list <- reactiveVal(list())
-  current_task_id <- reactiveVal(NULL) 
+  
   observeEvent(input$submit_analysis, {
     
+  
     req(input$file1)  
-    
- 
     task_id <- UUIDgenerate()
-    current_task_id(task_id)
-    
-
     task_dir <- file.path("/data/scriskb/tasks", task_id)
     dir.create(task_dir, recursive = TRUE)
+    
   
     file_path <- file.path(task_dir, input$file1$name)
     file.copy(input$file1$datapath, file_path)
     gs_path <- file.path(task_dir, "risk_file.txt")
     
-    
     if (input$data_type == "rna") {
- 
+      req(input$disease_select, input$tissue_select) 
       query <- sprintf(
         "SELECT `Risk Genes`, `ZSTAT` FROM `Risk Gene` WHERE `Tissue name` = '%s' AND `Disease_id` = '%s'",
-        selected_tissue, selected_disease
+        input$tissue_select, input$disease_select
       )
       cursor <- conn$cursor()
       cursor$execute(query)
       gs_data <- cursor$fetchall()
       
-   
       columns <- c("Genes", "ZSTAT")  
       gs_data <- as.data.frame(do.call(rbind, gs_data), stringsAsFactors = FALSE)
       colnames(gs_data) <- columns
       write.table(gs_data, gs_path, sep = "\t", row.names = FALSE, quote = FALSE)
+      
     } else if (input$data_type == "atac") {
       req(input$gs_upload)  
       file.copy(input$gs_upload$datapath, gs_path)
     }
     
-    
-    task_info <- list(
-      id = task_id,
-      file_path = file_path,
-      group_by=input$group_id,
-      data_type = input$data_type,
-      tissue = input$analysis_tissue_input,
-      disease = input$analysis_disease_input,
-      email = input$email,
-      status = "Scoring"
-    )
-    
+  
+    group_by_quoted <- shQuote(input$group_id)
     
     tasks <- task_list()
-    tasks[[task_id]] <- task_info
+    tasks[[task_id]] <- list(id = task_id, status = "Scoring")
     task_list(tasks)
-    group_by_quoted <- shQuote(input$group_id)
-  
+    
     future({
       system2("/home/shiny/miniconda3/envs/shiny_py/bin/python",
               args = c("scripts/process_data.py",
                        "--file", file_path,
                        "--risk_data", gs_path,
-                       "--group_by",group_by_quoted,
+                       "--group_by", group_by_quoted,
                        "--output", file.path(task_dir)),
               wait = TRUE)
     }) %...>% (function(result) {
     
       tasks <- task_list()
+   
       result_files <- list.files(task_dir, pattern = "result.txt$", full.names = TRUE)
-      if (length(result_files) > 0 && all(file.exists(result_files))) {
+      if (length(result_files) > 0) {
         tasks[[task_id]]$status <- "Completed"
       } else {
         tasks[[task_id]]$status <- "Failed"
       }
-      
       task_list(tasks)
     }) %...!% (function(e) {
-    
       tasks <- task_list()
       tasks[[task_id]]$status <- "Failed"
       task_list(tasks)
     })
     
+    output$submission_feedback <- renderUI({
+      div(style = "margin-top: 15px; padding: 10px; background-color: #dff0d8; border: 1px solid #d6e9c6; border-radius: 4px; color: #3c763d; text-align: center;",
+          icon("check-circle"), 
+          span(style = "font-weight: bold;", "Task Submitted!"), 
+          br(),
+          "Your Task ID is: ", strong(task_id), br(),
+          "Please copy it to check status later."
+      )
+    })
+    
+
+    updateTextInput(session, "task_id_input", value = task_id)
+    
     output$task_id_output <- renderText(sprintf("Job ID: %s", task_id))
   })
   
+  
 
-  output$run_status <- renderText({
-    current_id <- current_task_id()
-    if (is.null(current_id) || current_id == "") {
-      current_id <- "" 
+  get_task_status <- function(tid) {
+    if (is.null(tid) || tid == "") return("Waiting")
+    
+ 
+    task_dir <- file.path("/data/scriskb/tasks", tid)
+    
+  
+    if (!dir.exists(task_dir)) {
+      return("NotFound")
     }
     
-    task_id <- ifelse(nchar(input$task_id_input) > 0, input$task_id_input, current_id)
+
+    result_files <- list.files(task_dir, pattern = "result.txt$", full.names = TRUE)
     
-    if (task_id == "") {
-      return("No Task ID found, please enter a valid Task ID.")
-    }
-    
+    if (length(result_files) > 0) {
+ 
+      return("Completed") 
+    } else {
    
-    tasks <- task_list()
-    if (!is.null(tasks[[task_id]])) {
-      return(sprintf("Task %s status: %s", task_id, tasks[[task_id]]$status))
-    } else {
-      return("Task not found.")
+      return("Running")
     }
-  })
-  
+  }
   
 
-  output$download_ui <- renderUI({
-    task_id <- input$task_id_input
-    tasks <- task_list()
+  output$status_card_ui <- renderUI({
+    tid <- input$task_id_input
     
-    if (!is.null(tasks[[task_id]]) && tasks[[task_id]]$status == "Completed") {
-      downloadButton("download_task", "Download Results", class = "btn btn-success", style = "width: 100%")
-    } else {
-      disabled_download <- tags$button("Results (Waiting...)", class = "btn btn-secondary", disabled = TRUE, style = "width: 100%")
-      return(disabled_download)
+    if (is.null(tid) || tid == "") {
+      return(NULL)
+    }
+    
+    status <- get_task_status(tid)
+    
+    if (status == "NotFound") {
+      div(class = "alert alert-danger", style = "text-align: center;",
+          icon("times-circle"), " Task ID not found. Please check your input.")
+    } else if (status == "Running") {
+      div(class = "alert alert-info", style = "text-align: center;",
+          icon("spinner", class = "fa-spin"), " Task is currently running. Please wait...")
+    } else if (status == "Completed") {
+      div(class = "alert alert-success", style = "text-align: center;",
+          icon("check-circle"), " Task Completed Successfully! You can download the results below.")
     }
   })
   
 
+  output$download_ui_polished <- renderUI({
+    tid <- input$task_id_input
+    status <- get_task_status(tid)
+    
+    if (status == "Completed") {
+      div(style = "text-align: center; margin-top: 20px;",
+        
+          downloadButton("download_task", "Download Results", 
+                         class = "btn btn-success", 
+                         style = "width: 200px; background-color: #28a745; border-color: #28a745; box-shadow: 0 2px 5px rgba(0,0,0,0.15);"
+          )
+      )
+    } else {
+      NULL 
+    }
+  })
+  
   output$download_task <- downloadHandler(
     filename = function() {
       paste0(input$task_id_input, "_results.tar.gz")
     },
     content = function(file) {
       task_id <- input$task_id_input
-      task_path <- file.path("tasks", task_id)
-      
-  
-      tasks <- task_list()
-      if (is.null(tasks[[task_id]]) || tasks[[task_id]]$status != "Completed") {
-        stop("Task is not completed yet. Please wait.")
-      }
+      task_path <- file.path("/data/scriskb/tasks", task_id)
       
       if (dir.exists(task_path)) {
         tar_file <- file.path(tempdir(), paste0(task_id, "_results.tar.gz"))
         system(sprintf("tar -czf %s -C %s .", tar_file, task_path))  
         file.copy(tar_file, file)
       } else {
-        stop("Task results not found!")
+        stop("Task results not found.")
       }
     }
   )
-  
   ######################END###########################
   
   onStop(function() {
